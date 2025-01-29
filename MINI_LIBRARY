@@ -1,0 +1,280 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_BOOKS 100
+#define MAX_NAME_LENGTH 50
+#define MAX_QUEUE_SIZE 100
+
+// Structures
+typedef struct Book {
+    int id;
+    char title[MAX_NAME_LENGTH];
+    char author[MAX_NAME_LENGTH];
+    int isIssued;
+    int returnDate;
+    struct Book *next;
+} Book;
+
+typedef struct Queue {
+    int front, rear;
+    int capacity;
+    int size;
+    int data[MAX_QUEUE_SIZE];
+} Queue;
+
+typedef struct Stack {
+    int top;
+    unsigned capacity;
+    int data[MAX_QUEUE_SIZE];
+} Stack;
+
+// Global variables
+Book *library[MAX_BOOKS];
+Queue *returnQueue;
+Stack *fineStack;
+
+// Function prototypes
+unsigned hash(int id);
+Book* createBook(int id, const char *title, const char *author);
+void initLibrary();
+void enqueueReturn(int bookId);
+int dequeueReturn();
+void pushFine(int amount);
+int popFine();
+void initQueue(Queue **queue, int capacity);
+void enqueue(Queue *queue, int item);
+int dequeue(Queue *queue);
+void initStack(Stack **stack, unsigned capacity);
+void push(Stack *stack, int item);
+int pop(Stack *stack);
+void issueBook();
+void returnBook();
+void checkForOverdue();
+void displayBooks();
+
+int main() {
+    initLibrary();
+    initQueue(&returnQueue, MAX_QUEUE_SIZE);
+    initStack(&fineStack, MAX_QUEUE_SIZE);
+
+    int choice;
+    do {
+        printf("\nLibrary Management System\n");
+        printf("1. Issue Book\n");
+        printf("2. Return Book\n");
+        printf("3. Check for Overdue Books\n");
+        printf("4. Display Books\n");
+        printf("5. Exit\n");
+        printf("Enter your choice: ");
+        scanf("%d", &choice);
+
+        switch (choice) {
+            case 1:
+                issueBook();
+                break;
+            case 2:
+                returnBook();
+                break;
+            case 3:
+                checkForOverdue();
+                break;
+            case 4:
+                displayBooks();
+                break;
+            case 5:
+                printf("Exiting program.\n");
+                break;
+            default:
+                printf("Invalid choice. Please try again.\n");
+        }
+    } while (choice != 5);
+
+    return 0;
+}
+
+unsigned hash(int id) {
+    return id % MAX_BOOKS;
+}
+
+Book* createBook(int id, const char *title, const char *author) {
+    Book *newBook = (Book *)malloc(sizeof(Book));
+    newBook->id = id;
+    strcpy(newBook->title, title);
+    strcpy(newBook->author, author);
+    newBook->isIssued = 0;
+    newBook->returnDate = -1;
+    newBook->next = NULL;
+    return newBook;
+}
+
+void initLibrary() {
+    for (int i = 0; i < MAX_BOOKS; ++i) {
+        library[i] = NULL;
+    }
+}
+
+void enqueueReturn(int bookId) {
+    enqueue(returnQueue, bookId);
+}
+
+int dequeueReturn() {
+    return dequeue(returnQueue);
+}
+
+void pushFine(int amount) {
+    push(fineStack, amount);
+}
+
+int popFine() {
+    return pop(fineStack);
+}
+
+void initQueue(Queue **queue, int capacity) {
+    *queue = (Queue *)malloc(sizeof(Queue));
+    (*queue)->front = (*queue)->size = 0;
+    (*queue)->rear = capacity - 1;
+    (*queue)->capacity = capacity;
+}
+
+void enqueue(Queue *queue, int item) {
+    if (queue->size == queue->capacity) {
+        printf("Queue is full.\n");
+        return;
+    }
+    queue->rear = (queue->rear + 1) % queue->capacity;
+    queue->data[queue->rear] = item;
+    queue->size++;
+}
+
+int dequeue(Queue *queue) {
+    if (queue->size == 0) {
+        printf("Queue is empty.\n");
+        return -1;
+    }
+    int item = queue->data[queue->front];
+    queue->front = (queue->front + 1) % queue->capacity;
+    queue->size--;
+    return item;
+}
+
+void initStack(Stack **stack, unsigned capacity) {
+    *stack = (Stack *)malloc(sizeof(Stack));
+    (*stack)->top = -1;
+    (*stack)->capacity = capacity;
+}
+
+void push(Stack *stack, int item) {
+    if (stack->top == stack->capacity - 1) {
+        printf("Stack is full.\n");
+        return;
+    }
+    stack->data[++stack->top] = item;
+}
+
+int pop(Stack *stack) {
+    if (stack->top == -1) {
+        printf("Stack is empty.\n");
+        return -1;
+    }
+    return stack->data[stack->top--];
+}
+
+void issueBook() {
+    int bookId, returnDate;
+    char title[MAX_NAME_LENGTH], author[MAX_NAME_LENGTH];
+
+    printf("Enter Book ID: ");
+    scanf("%d", &bookId);
+    printf("Enter Book Title: ");
+    scanf("%s", title);
+    printf("Enter Author Name: ");
+    scanf("%s", author);
+    printf("Enter Return Date: ");
+    scanf("%d", &returnDate);
+
+    unsigned index = hash(bookId);
+    Book *newBook = createBook(bookId, title, author);
+
+    if (library[index] == NULL) {
+        library[index] = newBook;
+    } else {
+        Book *current = library[index];
+        while (current->next != NULL) {
+            current = current->next;
+        }
+        current->next = newBook;
+    }
+
+    newBook->isIssued = 1;
+    newBook->returnDate = returnDate;
+
+    printf("Book issued successfully.\n");
+}
+
+void returnBook() {
+    int bookId, returnDate;
+
+    printf("Enter Book ID: ");
+    scanf("%d", &bookId);
+    printf("Enter Return Date: ");
+    scanf("%d", &returnDate);
+
+    unsigned index = hash(bookId);
+
+    if (library[index] == NULL) {
+        printf("Book not found.\n");
+        return;
+    }
+
+    Book *current = library[index];
+    while (current != NULL) {
+        if (current->id == bookId) {
+            current->isIssued = 0;
+            int fine = 0;
+
+            if (returnDate > current->returnDate) {
+                fine = (returnDate - current->returnDate) * 5; // Assuming a fine of $5 per day
+                pushFine(fine);
+            }
+
+            enqueueReturn(bookId);
+            printf("Book returned successfully.\n");
+            return;
+        }
+        current = current->next;
+    }
+
+    printf("Book not found.\n");
+}
+
+void checkForOverdue() {
+    int totalFine = 0;
+    while (returnQueue->size > 0) {
+        int bookId = dequeueReturn();
+        int fine = popFine();
+        totalFine += fine;
+    }
+
+    if (totalFine > 0) {
+        printf("Total Fine Collected: $%d\n", totalFine);
+    } else {
+        printf("No overdue books found.\n");
+    }
+}
+
+void displayBooks() {
+    printf("Book ID\tTitle\tAuthor\tStatus\tReturn Date\n");
+    printf("-----------------------------------------\n");
+
+    for (int i = 0; i < MAX_BOOKS; ++i) {
+        Book *current = library[i];
+        while (current != NULL) {
+            printf("%d\t%s\t%s\t%s\t%d\n", current->id, current->title, current->author,
+                   current->isIssued ? "Issued" : "Available", current->returnDate);
+            current = current->next;
+        }
+    }
+
+    printf("-----------------------------------------\n");
+}
